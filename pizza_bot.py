@@ -15,7 +15,8 @@ from telebot import types
 import json
 
 user_info = {}
-
+cart_items = []
+ITEMS_PER_PAGE = 5
 
 
 TOKEN = "7269694977:AAEHEemEKbBpp2w6N8hTZsLNCpnoqZ9_ywE"
@@ -45,9 +46,18 @@ def handle_name(message):
 
 def handle_telephone(message, name):
     telephone = message.text
-    user_info['phone'] = telephone
-    save_info(user_info)
-    bot.send_message(message.chat.id, 'Данные успешно добавлены')
+    alph = []
+    try:
+        telephone = int(telephone)
+        user_info['phone'] = telephone
+        save_info(user_info)
+        bot.send_message(message.chat.id, 'Данные успешно добавлены')
+    except:
+        bot.send_message(message.chat.id, 'Телефон введен не правильно')
+        bot.send_message(message.chat.id, 'Введите ваш номер телефона')
+        bot.register_next_step_handler_by_chat_id(message.chat.id, handle_telephone, name)
+
+
 
 def save_info(info):
     with open('data.json', 'r', encoding='utf-8') as file:
@@ -59,7 +69,7 @@ def save_info(info):
 def handler_start_menu(message):
     if message.text == 'Меню🍕':
         show_menu(message)
-    elif message.text == 'Корзина🧺':
+    elif message.text[0:7] == 'Корзина':
         show_cart(message)
     else:
         bot.send_message(message.chat.id, 'Выберите кнопку', reply_markup=bot_start_menu())
@@ -67,6 +77,9 @@ def handler_start_menu(message):
 
 def show_menu(message):
     bot.send_message(message.chat.id, 'Меню', reply_markup=create_menu())
+
+def show_cart(message):
+    bot.send_message(message.chat.id, 'Корзина', reply_markup=create_cart())
 
 
 def bot_start_menu():
@@ -76,14 +89,53 @@ def bot_start_menu():
     markup.add(btn1, btn2)
     return markup
 
-def create_menu():
+
+def create_menu(page=0):
     markup = types.InlineKeyboardMarkup()
+    start_index = page * ITEMS_PER_PAGE
+    end_index = start_index + ITEMS_PER_PAGE
     with open('products.json', 'r', encoding='utf-8') as file:
         products_list = json.load(file)
-        for product in products_list['menu_items']:
+        for product in products_list['menu_items'][start_index:end_index]:
             callback_data = f'item:{product["name"]}'
             button = types.InlineKeyboardButton(text=product['name'], callback_data=callback_data)
             markup.add(button)
+        if page > 0:
+            btn1 = types.InlineKeyboardButton(text='<<', callback_data=f'page:{page-1}')
+            markup.add(btn1)
+        if end_index < len(products_list):
+            btn2 = types.InlineKeyboardButton(text='>>', callback_data=f'page:{page+1}')
+            markup.add(btn2)
+
+    return markup
+
+
+def create_cart():
+    if cart_items:
+        markup = types.InlineKeyboardMarkup()
+        for item in cart_items:
+            callback_data = f'item:{item["name"]}'
+            button = types.InlineKeyboardButton(text=f'{item["name"]} - {item["price"]}', callback_data=callback_data)
+            markup.add(button)
+
+    else:
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        button = types.KeyboardButton(text='Корзина пуста')
+        markup.add(button)
+    return markup
+
+
+def add_to_cart(name, price):
+    markup = types.InlineKeyboardMarkup()
+    button = types.InlineKeyboardButton(text='Добавить в корзину', callback_data=f'add_cart:{name}:{price}')
+    markup.add(button)
+    return markup
+
+
+def to_cart():
+    markup = types.InlineKeyboardMarkup()
+    button = types.InlineKeyboardButton(text='Перейти в корзину', callback_data=f'to_cart:')
+    markup.add(button)
     return markup
 
 
@@ -97,11 +149,22 @@ def handle_menu(call):
             for product in data['menu_items']:
                 if product['name'] == chosen_product:
                     photo = open(f'./images/{product["photo"]}', 'rb')
-                    bot.send_photo(call.message.chat.id, photo, caption=f'{chosen_product}, \n {product["price"]} ')
+                    bot.send_photo(call.message.chat.id, photo, caption=f'{chosen_product},\n{product["price"]}', reply_markup=add_to_cart(product["name"], product["price"]))
+    elif call.data.startswith('add_cart:'):
+        name, price = call.data.split(':')[1], call.data.split(':')[2]
+        item = {
+            "name": name,
+            "price": price
+        }
+        cart_items.append(item)
+        bot.send_message(call.message.chat.id, 'Добавлено в корзину', reply_markup=to_cart())
+    elif call.data.startswith('to_cart:'):
+        show_cart(call.message)
+    elif call.data.startswith('page:'):
+        text, page = call.data.split(':')
+        markup = create_menu(int(page))
+        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text='Меню:', reply_markup=markup)
 
-
-def show_cart(message):
-    ...
 
 
 if __name__ == "__main__":
