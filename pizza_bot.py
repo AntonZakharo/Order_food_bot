@@ -103,23 +103,32 @@ def create_menu(page=0):
         if page > 0:
             btn1 = types.InlineKeyboardButton(text='<<', callback_data=f'page:{page-1}')
             markup.add(btn1)
-        if end_index < len(products_list):
+        if end_index < len(products_list['menu_items']):
             btn2 = types.InlineKeyboardButton(text='>>', callback_data=f'page:{page+1}')
             markup.add(btn2)
-
     return markup
 
 
 def create_cart():
     if cart_items:
         markup = types.InlineKeyboardMarkup()
+        price = 0
+        temp_cart = cart_items
         for item in cart_items:
-            callback_data = f'item:{item["name"]}'
-            button = types.InlineKeyboardButton(text=f'{item["name"]} - {item["price"]}', callback_data=callback_data)
-            markup.add(button)
+            producttype = 0
+            for item2 in cart_items:
+                if item == item2:
+                    producttype += 1
+                    temp_cart.remove(item2)
 
+            callback_data = f'item:{item["name"]}'
+            button = types.InlineKeyboardButton(text=f'{item["name"]} x{producttype} - {int(item["price"].split(" ")[0])*producttype}', callback_data=callback_data)
+            markup.add(button)
+            price += int(item["price"].split(' ')[0])
+        total = types.InlineKeyboardButton(text=f'Итого: {price} руб', callback_data='dataprice')
+        markup.add(total)
     else:
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
         button = types.KeyboardButton(text='Корзина пуста')
         markup.add(button)
     return markup
@@ -152,6 +161,8 @@ def handle_menu(call):
                     bot.send_photo(call.message.chat.id, photo, caption=f'{chosen_product},\n{product["price"]}', reply_markup=add_to_cart(product["name"], product["price"]))
     elif call.data.startswith('add_cart:'):
         name, price = call.data.split(':')[1], call.data.split(':')[2]
+
+        # bot.edit_message_text(text='Удалить из корзины', message_id=call.message.message_id)
         item = {
             "name": name,
             "price": price
@@ -164,8 +175,6 @@ def handle_menu(call):
         text, page = call.data.split(':')
         markup = create_menu(int(page))
         bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text='Меню:', reply_markup=markup)
-
-
 
 if __name__ == "__main__":
     bot.polling(none_stop=True)
